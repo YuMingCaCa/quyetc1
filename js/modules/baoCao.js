@@ -1,5 +1,6 @@
-import { db, collection, query, where, getDocs, Timestamp, orderBy } from '../config/firebase.js';
+import { db, collection, query, where, getDocs, Timestamp, orderBy, doc, updateDoc, deleteDoc } from '../config/firebase.js';
 import { currencyFormatter } from '../utils/formatters.js';
+import { generateAndPrintInvoice, huyThanhToan } from './banHang.js';
 
 // --- Lấy các phần tử HTML ---
 const inputChonThangBaoCao = document.getElementById('chon-thang-bao-cao');
@@ -18,8 +19,14 @@ const statDoanhThuNgay = document.getElementById('stat-doanh-thu-ngay');
 const statChiPhiNgay = document.getElementById('stat-chi-phi-ngay');
 const statLoiNhuanNgay = document.getElementById('stat-loi-nhuan-ngay');
 
+// Tìm kiếm hóa đơn
+const searchByTableInput = document.getElementById('search-by-table');
+const searchByDateInput = document.getElementById('search-by-date');
+const btnClearSearch = document.getElementById('btn-clear-search');
+
 // --- Biến trạng thái ---
 let profitChartInstance = null;
+let currentMonthSalesDocs = []; // Lưu hóa đơn của tháng đang xem để lọc
 
 /**
  * Hàm trợ giúp để lấy tổng tiền từ một collection trong một khoảng thời gian.
@@ -42,6 +49,42 @@ async function getTotalAmountInRange(collectionName, dateField, amountField, sta
         total += doc.data()[amountField];
     });
     return total;
+}
+
+/**
+ * Render bảng chi tiết doanh thu từ một danh sách các document.
+ * @param {Array} docsToRender - Mảng các document hóa đơn cần hiển thị.
+ */
+function renderSalesDetailTable(docsToRender) {
+    bangChiTietDoanhThu.innerHTML = `
+        <thead>
+            <tr>
+                <th>Ngày Thanh Toán</th>
+                <th>Bàn</th>
+                <th>Tổng Tiền</th>
+                <th>Hành Động</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${docsToRender.map(doc => {
+                const data = doc.data();
+                return `
+                    <tr>
+                        <td>${data.ngay_thanh_toan.toDate().toLocaleString('vi-VN')}</td>
+                        <td>${data.ten_ban}</td>
+                        <td>${currencyFormatter.format(data.tong_tien)}</td>
+                        <td>
+                            <button class="btn-in-lai" data-id="${doc.id}">In Lại</button>
+                            <button class="btn-huy" data-id="${doc.id}">Hủy</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('')}
+        </tbody>
+    `;
+    if (docsToRender.length === 0) {
+        bangChiTietDoanhThu.querySelector('tbody').innerHTML = `<tr><td colspan="4" style="text-align:center;">Không tìm thấy hóa đơn nào.</td></tr>`;
+    }
 }
 
 /**
@@ -69,31 +112,9 @@ async function hienThiBaoCaoTongQuan() {
     statChiPhi.textContent = currencyFormatter.format(totalCost);
     statLoiNhuan.textContent = currencyFormatter.format(profit);
 
-    // Hiển thị bảng chi tiết doanh thu
-    bangChiTietDoanhThu.innerHTML = `
-        <thead>
-            <tr>
-                <th>Ngày Thanh Toán</th>
-                <th>Bàn</th>
-                <th>Tổng Tiền</th>
-            </tr>
-        </thead>
-        <tbody>
-            ${salesDetails.docs.map(doc => {
-                const data = doc.data();
-                return `
-                    <tr>
-                        <td>${data.ngay_thanh_toan.toDate().toLocaleString('vi-VN')}</td>
-                        <td>${data.ten_ban}</td>
-                        <td>${currencyFormatter.format(data.tong_tien)}</td>
-                    </tr>
-                `;
-            }).join('')}
-        </tbody>
-    `;
-    if (salesDetails.empty) {
-        bangChiTietDoanhThu.querySelector('tbody').innerHTML = `<tr><td colspan="3" style="text-align:center;">Không có hóa đơn nào trong tháng này.</td></tr>`;
-    }
+    // Lưu lại và hiển thị bảng chi tiết doanh thu
+    currentMonthSalesDocs = salesDetails.docs;
+    renderSalesDetailTable(currentMonthSalesDocs);
 
     // Hiển thị bảng chi tiết chi phí
     const costTableBody = bangChiTietChiPhi.querySelector('tbody');
@@ -107,12 +128,105 @@ async function hienThiBaoCaoTongQuan() {
                 <td>${data.don_vi_tinh}</td>
                 <td>${currencyFormatter.format(data.don_gia)}</td>
                 <td>${currencyFormatter.format(data.thanh_tien)}</td>
+                <td>
+                    <button class="btn-sua-mon" data-id="${doc.id}" data-soluong="${data.so_luong}" data-dongia="${data.don_gia}">Sửa</button>
+                    <button class="btn-huy" data-id="${doc.id}">Xóa</button>
+                </td>
             </tr>
         `;
     }).join('');
 
     if (costDetails.empty) {
-        costTableBody.innerHTML = `<tr><td colspan="6" style="text-align:center;">Không có chi phí nào trong tháng này.</td></tr>`;
+        costTableBody.innerHTML = `<tr><td colspan="7" style="text-align:center;">Không có chi phí nào trong tháng này.</td></tr>`;
+    }
+}
+
+/**
+ * Lọc và hiển thị lại bảng chi tiết doanh thu dựa trên các ô tìm kiếm.
+ */
+function filterAndRenderSales() {
+    const searchTerm = searchByTableInput.value.toLowerCase().trim();
+    const searchDate = searchByDateInput.value;
+
+    let filteredDocs = currentMonthSalesDocs;
+
+    // Lọc theo tên bàn
+    if (searchTerm) {
+        filteredDocs = filteredDocs.filter(doc =>
+            doc.data().ten_ban.toLowerCase().includes(searchTerm)
+        );
+    }
+
+    // Lọc theo ngày
+    if (searchDate) {
+        filteredDocs = filteredDocs.filter(doc => {
+            const docDate = doc.data().ngay_thanh_toan.toDate();
+            // So sánh chuỗi YYYY-MM-DD
+            return docDate.toISOString().slice(0, 10) === searchDate;
+        });
+    }
+
+    renderSalesDetailTable(filteredDocs);
+}
+
+/**
+ * Sửa một khoản chi phí nhập kho.
+ */
+async function suaChiPhi(e) {
+    if (!e.target.classList.contains('btn-sua-mon')) return;
+
+    const id = e.target.dataset.id;
+    const soLuongCu = e.target.dataset.soluong;
+    const donGiaCu = e.target.dataset.dongia;
+
+    const soLuongMoiStr = prompt("Nhập số lượng mới:", soLuongCu);
+    if (soLuongMoiStr === null) return;
+
+    const donGiaMoiStr = prompt("Nhập đơn giá mới:", donGiaCu);
+    if (donGiaMoiStr === null) return;
+
+    const soLuongMoi = parseFloat(soLuongMoiStr);
+    const donGiaMoi = parseFloat(donGiaMoiStr);
+
+    if (isNaN(soLuongMoi) || isNaN(donGiaMoi) || soLuongMoi < 0 || donGiaMoi < 0) {
+        alert("Vui lòng nhập số lượng và đơn giá hợp lệ.");
+        return;
+    }
+
+    const thanhTienMoi = soLuongMoi * donGiaMoi;
+    const chiPhiRef = doc(db, "QuyetC1_lich_su_nhap_hang", id);
+
+    try {
+        await updateDoc(chiPhiRef, {
+            so_luong: soLuongMoi,
+            don_gia: donGiaMoi,
+            thanh_tien: thanhTienMoi
+        });
+        alert("Cập nhật chi phí thành công!");
+        hienThiBaoCaoTongQuan(); // Tải lại dữ liệu báo cáo để thấy thay đổi
+    } catch (error) {
+        console.error("Lỗi khi cập nhật chi phí: ", error);
+        alert("Có lỗi xảy ra khi cập nhật chi phí.");
+    }
+}
+
+/**
+ * Xóa một khoản chi phí nhập kho.
+ */
+async function xoaChiPhi(e) {
+    if (!e.target.classList.contains('btn-huy')) return;
+
+    const id = e.target.dataset.id;
+    if (confirm("Bạn có chắc chắn muốn xóa khoản chi phí này không? Thao tác này không thể hoàn tác.")) {
+        const chiPhiRef = doc(db, "QuyetC1_lich_su_nhap_hang", id);
+        try {
+            await deleteDoc(chiPhiRef);
+            alert("Xóa chi phí thành công!");
+            hienThiBaoCaoTongQuan(); // Tải lại dữ liệu báo cáo để thấy thay đổi
+        } catch (error) {
+            console.error("Lỗi khi xóa chi phí: ", error);
+            alert("Có lỗi xảy ra khi xóa chi phí.");
+        }
     }
 }
 
@@ -245,9 +359,43 @@ export function initBaoCao() {
     setInitialReportMonth();
     setInitialReportDate();
 
-    // Gắn sự kiện cho các nút xem báo cáo
+    // Gắn sự kiện cho các nút xem báo cáo và bộ lọc
     btnXemBaoCaoThang.addEventListener('click', hienThiBaoCaoTongQuan);
     btnXemBaoCaoNgay.addEventListener('click', hienThiBaoCaoNgay);
+    searchByTableInput.addEventListener('input', filterAndRenderSales);
+    searchByDateInput.addEventListener('input', filterAndRenderSales);
+    bangChiTietChiPhi.addEventListener('click', (e) => {
+        suaChiPhi(e);
+        xoaChiPhi(e);
+    });
+
+    bangChiTietDoanhThu.addEventListener('click', (e) => {
+        if (e.target.classList.contains('btn-in-lai')) {
+            const docId = e.target.dataset.id;
+            const hoaDonDoc = currentMonthSalesDocs.find(doc => doc.id === docId);
+            if (hoaDonDoc) {
+                generateAndPrintInvoice(hoaDonDoc.data());
+            }
+        }
+        if (e.target.classList.contains('btn-huy')) {
+            const docId = e.target.dataset.id;
+            const hoaDonDoc = currentMonthSalesDocs.find(doc => doc.id === docId);
+            if (hoaDonDoc) {
+                const hoaDonData = hoaDonDoc.data();
+                if (confirm(`Bạn có chắc chắn muốn HỦY hóa đơn cho bàn "${hoaDonData.ten_ban}" không?\n\nHành động này sẽ mở lại bàn và xóa hóa đơn khỏi lịch sử.`)) {
+                    huyThanhToan(docId, hoaDonData).then(success => {
+                        // Nếu hủy thành công, tải lại báo cáo để cập nhật
+                        if (success) hienThiBaoCaoTongQuan();
+                    });
+                }
+            }
+        }
+    });
+    btnClearSearch.addEventListener('click', () => {
+        searchByTableInput.value = '';
+        searchByDateInput.value = '';
+        filterAndRenderSales();
+    });
 
     // Tải dữ liệu lần đầu khi mở tab Báo cáo
     hienThiBaoCaoTongQuan();

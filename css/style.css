@@ -220,7 +220,10 @@ tbody tr:nth-child(even) {
     background-color: #e67e22;
 }
 
-#bang-quan-ly-menu td:last-child {
+ #bang-quan-ly-menu td:last-child,
+#bang-quan-ly-ban td:last-child,
+#bang-chi-tiet-doanh-thu td:last-child,
+#bang-chi-tiet-chi-phi td:last-child {
     display: flex;
     gap: 5px;
 }
@@ -268,8 +271,8 @@ tbody tr:nth-child(even) {
     display: block;
 }
 
-/* --- Styles cho Quản lý Menu --- */
-.menu-management-container {
+/* --- Styles cho các trang Quản lý (Menu, Bàn) --- */
+.management-container {
     display: grid;
     grid-template-columns: 1fr 2fr; /* Chia 2 cột, cột phải to hơn */
     gap: 25px;
@@ -315,4 +318,43 @@ tbody tr:nth-child(even) {
     font-size: 1.8em;
     font-weight: bold;
     color: #2c3e50;
+}
+
+/* --- Styles cho nút Xóa Lọc --- */
+#btn-clear-search {
+    background-color: #95a5a6; /* Màu xám trung tính */
+}
+
+#btn-clear-search:hover {
+    background-color: #7f8c8d;
+}
+
+/* --- Styles cho nút In Lại Hóa Đơn --- */
+.btn-in-lai {
+    background-color: #3498db; /* Màu xanh dương */
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 5px 8px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.btn-in-lai:hover {
+    background-color: #2980b9;
+}
+
+/* --- Styles cho nút Hủy Thanh Toán --- */
+.btn-huy {
+    background-color: #e74c3c; /* Màu đỏ cảnh báo */
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 5px 8px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.btn-huy:hover {
+    background-color: #c0392b;
 }

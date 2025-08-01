@@ -2,6 +2,7 @@ import { initNhapHang } from './modules/nhapHang.js';
 import { initBanHang } from './modules/banHang.js';
 import { initMenu } from './modules/menu.js';
 import { initBaoCao } from './modules/baoCao.js';
+import { initBan } from './modules/ban.js';
 
 // Hàm này sẽ chạy khi toàn bộ trang web đã được tải xong
 document.addEventListener('DOMContentLoaded', () => { 
@@ -10,9 +11,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Khởi tạo chức năng chuyển đổi tab
     initTabs();
 
-    // Khởi tạo module Quản lý Menu (phải chạy trước Bán Hàng)
+    // Khởi tạo các module quản lý dữ liệu nền (phải chạy trước các module chức năng)
     initMenu();
+    initBan();
 
+    // Khởi tạo các module chức năng chính
     // Khởi tạo module Nhập Hàng
     initNhapHang();
     

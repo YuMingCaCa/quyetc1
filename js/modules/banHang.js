@@ -1,13 +1,11 @@
-import { db, collection, addDoc, doc, setDoc, onSnapshot, deleteDoc, Timestamp, query } from '../config/firebase.js';
+import { db, collection, addDoc, doc, setDoc, onSnapshot, deleteDoc, Timestamp, query, getDoc } from '../config/firebase.js';
 import { currencyFormatter } from '../utils/formatters.js';
 import { menuData } from './menu.js';
+import { danhSachBanData } from './ban.js';
 
 // =================================================================
 // --- CẤU HÌNH & KHAI BÁO ---
 // =================================================================
-
-// Danh sách các bàn của quán bạn. Bạn có thể thay đổi tùy ý.
-const DANH_SACH_SO_BAN = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'VIP 1', 'VIP 2'];
 
 // Lấy các phần tử HTML
 const danhSachBanDiv = document.getElementById('danh-sach-ban');
@@ -35,7 +33,7 @@ let donHangCuaCacBan = new Map(); // Lưu trạng thái tất cả các bàn đa
  */
 function renderLuoiBanAn() {
     danhSachBanDiv.innerHTML = ''; // Xóa các bàn cũ
-    DANH_SACH_SO_BAN.forEach(soBan => {
+    danhSachBanData.forEach(soBan => {
         const banElement = document.createElement('button');
         banElement.classList.add('table-item');
         banElement.textContent = soBan;
@@ -162,21 +160,23 @@ async function xoaMon(e) {
 }
 
 /**
- * Tạo nội dung hóa đơn và mở cửa sổ in.
+ * Tạo nội dung hóa đơn từ dữ liệu và mở cửa sổ in.
+ * Hàm này có thể được tái sử dụng để in lại hóa đơn cũ.
+ * @param {object} hoaDonData - Dữ liệu của hóa đơn cần in.
  */
-function inHoaDon() {
-    const donHangHienTai = donHangCuaCacBan.get(banDuocChon);
-    if (!donHangHienTai || donHangHienTai.chi_tiet_mon.length === 0) {
-        alert("Bàn trống hoặc chưa chọn bàn, không có gì để in!");
+export function generateAndPrintInvoice(hoaDonData) {
+    if (!hoaDonData || !hoaDonData.chi_tiet_mon || hoaDonData.chi_tiet_mon.length === 0) {
+        console.error("Dữ liệu hóa đơn không hợp lệ để in.");
         return;
     }
 
-    const now = new Date();
-    const ngayIn = now.toLocaleDateString('vi-VN');
-    const gioIn = now.toLocaleTimeString('vi-VN');
+    // Nếu là hóa đơn cũ (có trường ngay_thanh_toan), dùng ngày đó. Nếu không, dùng ngày giờ hiện tại.
+    const thoiGianHoaDon = hoaDonData.ngay_thanh_toan ? hoaDonData.ngay_thanh_toan.toDate() : new Date();
+    const ngayIn = thoiGianHoaDon.toLocaleDateString('vi-VN');
+    const gioIn = thoiGianHoaDon.toLocaleTimeString('vi-VN');
 
     let danhSachMonHTML = '';
-    donHangHienTai.chi_tiet_mon.forEach((mon, index) => {
+    hoaDonData.chi_tiet_mon.forEach((mon, index) => {
         danhSachMonHTML += `
             <tr>
                 <td>${index + 1}</td>
@@ -191,7 +191,7 @@ function inHoaDon() {
     const htmlContent = `
         <html>
         <head>
-            <title>Hóa Đơn Bàn ${donHangHienTai.ten_ban}</title>
+            <title>Hóa Đơn Bàn ${hoaDonData.ten_ban}</title>
             <style>
                 body { font-family: 'Courier New', Courier, monospace; margin: 0; padding: 10px; font-size: 12px; }
                 .invoice-box { max-width: 300px; margin: auto; padding: 10px; border: 1px solid #eee; box-shadow: 0 0 5px rgba(0, 0, 0, 0.15); }
@@ -211,7 +211,7 @@ function inHoaDon() {
                 <div class="header">
                     <h2>Quán Nhậu Quyết C1</h2>
                     <p>HÓA ĐƠN THANH TOÁN</p>
-                    <p>Bàn: ${donHangHienTai.ten_ban}</p>
+                    <p>Bàn: ${hoaDonData.ten_ban}</p>
                     <p>Ngày: ${ngayIn} - Giờ: ${gioIn}</p>
                 </div>
                 <table>
@@ -224,7 +224,7 @@ function inHoaDon() {
                     <tfoot>
                         <tr class="total-row">
                             <td colspan="4">TỔNG CỘNG</td>
-                            <td class="text-right">${currencyFormatter.format(donHangHienTai.tong_tien)}</td>
+                            <td class="text-right">${currencyFormatter.format(hoaDonData.tong_tien)}</td>
                         </tr>
                     </tfoot>
                 </table>
@@ -241,6 +241,55 @@ function inHoaDon() {
     printWindow.document.close();
     printWindow.focus();
     printWindow.print();
+}
+
+/**
+ * In hóa đơn cho bàn đang được chọn.
+ */
+function inHoaDon() {
+    const donHangHienTai = donHangCuaCacBan.get(banDuocChon);
+    if (!donHangHienTai || donHangHienTai.chi_tiet_mon.length === 0) {
+        alert("Bàn trống hoặc chưa chọn bàn, không có gì để in!");
+        return;
+    }
+    generateAndPrintInvoice(donHangHienTai);
+}
+
+/**
+ * Hủy một hóa đơn đã thanh toán, mở lại bàn.
+ * @param {string} hoaDonId - ID của hóa đơn trong collection lich_su_ban_hang.
+ * @param {object} hoaDonData - Dữ liệu của hóa đơn đó.
+ * @returns {Promise<boolean>} - Trả về true nếu thành công, false nếu thất bại.
+ */
+export async function huyThanhToan(hoaDonId, hoaDonData) {
+    const tenBan = hoaDonData.ten_ban;
+    const donHangHienTaiRef = doc(db, "QuyetC1_don_hang_hien_tai", `ban_${tenBan}`);
+
+    try {
+        // 1. Kiểm tra xem bàn có đang được sử dụng không
+        const docSnap = await getDoc(donHangHienTaiRef);
+        if (docSnap.exists()) {
+            alert(`Không thể hủy thanh toán. Bàn "${tenBan}" hiện đang có khách!`);
+            return false;
+        }
+
+        // 2. Tạo lại đơn hàng hiện tại từ dữ liệu hóa đơn cũ
+        // Loại bỏ trường ngay_thanh_toan trước khi tạo lại
+        const { ngay_thanh_toan, ...donHangDeMoLai } = hoaDonData;
+        await setDoc(donHangHienTaiRef, donHangDeMoLai);
+
+        // 3. Xóa hóa đơn khỏi lịch sử bán hàng
+        const hoaDonLichSuRef = doc(db, "QuyetC1_lich_su_ban_hang", hoaDonId);
+        await deleteDoc(hoaDonLichSuRef);
+
+        alert(`Đã hủy thanh toán và mở lại bàn "${tenBan}" thành công!`);
+        return true;
+
+    } catch (error) {
+        console.error("Lỗi khi hủy thanh toán: ", error);
+        alert("Có lỗi xảy ra trong quá trình hủy thanh toán.");
+        return false;
+    }
 }
 
 /**

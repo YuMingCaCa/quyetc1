@@ -18,6 +18,7 @@
             <button class="tab-link active" data-tab="tab-ban-hang">💰 Bán Hàng</button>
             <button class="tab-link" data-tab="tab-nhap-kho">📝 Nhập Kho</button>
             <button class="tab-link" data-tab="tab-quan-ly-menu">🍽️ Quản lý Menu</button>
+            <button class="tab-link" data-tab="tab-quan-ly-ban">🛋️ Quản lý Bàn</button>
             <button class="tab-link" data-tab="tab-bao-cao">📊 Báo Cáo</button>
         </div>
 
@@ -107,7 +108,7 @@
 
         <!-- Tab 4: Quản lý Menu -->
         <div id="tab-quan-ly-menu" class="tab-content">
-            <div class="menu-management-container">
+            <div class="management-container">
                 <div class="card">
                     <h2>Thêm Món Mới vào Menu</h2>
                     <form id="form-them-mon-menu">
@@ -133,6 +134,34 @@
                             </tr>
                         </thead>
                         <tbody><!-- Dữ liệu menu sẽ được chèn vào đây --></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 5: Quản lý Bàn -->
+        <div id="tab-quan-ly-ban" class="tab-content">
+            <div class="management-container">
+                <div class="card">
+                    <h2>Thêm Bàn Mới</h2>
+                    <form id="form-them-ban">
+                        <div class="form-group">
+                            <label for="ten-ban-moi">Tên/Số bàn</label>
+                            <input type="text" id="ten-ban-moi" placeholder="Ví dụ: 13, VIP 3, Sân Thượng" required>
+                        </div>
+                        <button type="submit">Thêm Bàn</button>
+                    </form>
+                </div>
+                <div class="card">
+                    <h2>Danh Sách Bàn Hiện Có</h2>
+                    <table id="bang-quan-ly-ban">
+                        <thead>
+                            <tr>
+                                <th>Tên/Số Bàn</th>
+                                <th>Hành Động</th>
+                            </tr>
+                        </thead>
+                        <tbody><!-- Dữ liệu bàn sẽ được chèn vào đây --></tbody>
                     </table>
                 </div>
             </div>
@@ -196,8 +225,24 @@
 
                 <div class="card">
                     <h2>Chi Tiết Doanh Thu (Hóa đơn đã thanh toán)</h2>
+                    <div class="filter-group">
+                        <input type="text" id="search-by-table" placeholder="Tìm theo tên bàn...">
+                        <input type="date" id="search-by-date">
+                        <button id="btn-clear-search">Xóa Lọc</button>
+                    </div>
+                    <hr>
                     <table id="bang-chi-tiet-doanh-thu">
-                        <!-- Chi tiết hóa đơn của tháng đã chọn sẽ hiện ở đây -->
+                        <thead>
+                            <tr>
+                                <th>Ngày Thanh Toán</th>
+                                <th>Bàn</th>
+                                <th>Tổng Tiền</th>
+                                <th>Hành Động</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Chi tiết hóa đơn của tháng đã chọn sẽ hiện ở đây -->
+                        </tbody>
                     </table>
                 </div>
 
@@ -212,6 +257,7 @@
                                 <th>Đơn Vị</th>
                                 <th>Đơn Giá</th>
                                 <th>Thành Tiền</th>
+                                <th>Hành Động</th>
                             </tr>
                         </thead>
                         <tbody>

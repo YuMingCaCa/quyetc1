@@ -1,6 +1,6 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
-import { getFirestore, collection, addDoc, query, where, getDocs, Timestamp, orderBy, doc, setDoc, onSnapshot, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, query, where, getDocs, getDoc, Timestamp, orderBy, doc, setDoc, onSnapshot, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -19,4 +19,4 @@ const db = getFirestore(app);
 console.log("Firebase và Firestore đã được khởi tạo!");
 
 // Export the database instance and all the functions we need
-export { db, collection, addDoc, query, where, getDocs, Timestamp, orderBy, doc, setDoc, onSnapshot, deleteDoc, updateDoc };
+export { db, collection, addDoc, query, where, getDocs, getDoc, Timestamp, orderBy, doc, setDoc, onSnapshot, deleteDoc, updateDoc };
