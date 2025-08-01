@@ -67,9 +67,10 @@ function initTabs() {
  * Cập nhật các tiêu đề của trang web dựa trên tên nhà hàng trong config.
  */
 function updatePageTitles() {
-    document.title = `Quản lý - ${RESTAURANT_NAME}`;
+    const title = `Quản lý - ${RESTAURANT_NAME}`;
+    document.title = title;
     const mainTitleElement = document.getElementById('main-title');
     if (mainTitleElement) {
-        mainTitleElement.textContent = `Quản lý - ${RESTAURANT_NAME}`;
+        mainTitleElement.textContent = title;
     }
 }
