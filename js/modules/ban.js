@@ -1,4 +1,5 @@
 import { db, collection, addDoc, onSnapshot, doc, deleteDoc, query, orderBy } from '../config/firebase.js';
+import { RESTAURANT_ID } from '../config.js';
 
 // --- Lấy các phần tử HTML ---
 const formThemBan = document.getElementById('form-them-ban');
@@ -10,7 +11,7 @@ const bangQuanLyBanBody = document.querySelector('#bang-quan-ly-ban tbody');
 export let danhSachBanData = [];
 
 /**
- * Thêm một bàn mới vào collection 'QuyetC1_ban' trên Firestore.
+ * Thêm một bàn mới vào collection 'tables' của nhà hàng hiện tại trên Firestore.
  */
 async function themBanMoi(e) {
     e.preventDefault();
@@ -28,7 +29,7 @@ async function themBanMoi(e) {
     }
 
     try {
-        await addDoc(collection(db, 'QuyetC1_ban'), {
+        await addDoc(collection(db, 'restaurants', RESTAURANT_ID, 'tables'), {
             ten_ban: tenBan,
         });
         alert(`Đã thêm bàn "${tenBan}" thành công!`);
@@ -49,7 +50,7 @@ async function xoaBan(e) {
     const tenBan = e.target.dataset.ten;
     if (confirm(`Bạn có chắc chắn muốn xóa bàn "${tenBan}" không?`)) {
         try {
-            await deleteDoc(doc(db, 'QuyetC1_ban', banId));
+            await deleteDoc(doc(db, 'restaurants', RESTAURANT_ID, 'tables', banId));
             alert('Đã xóa bàn thành công!');
         } catch (error) {
             console.error("Lỗi khi xóa bàn: ", error);
@@ -62,23 +63,34 @@ async function xoaBan(e) {
  * Render lại bảng quản lý bàn.
  */
 function renderBangQuanLyBan(snapshot) {
-    bangQuanLyBanBody.innerHTML = '';
+    if (bangQuanLyBanBody) {
+        bangQuanLyBanBody.innerHTML = '';
+    }
     danhSachBanData = snapshot.docs.map(doc => doc.data().ten_ban); // Cập nhật lại danh sách bàn
 
     snapshot.forEach(doc => {
         const ban = doc.data();
         const banId = doc.id;
-        const row = bangQuanLyBanBody.insertRow();
-        row.innerHTML = `
-            <td>${ban.ten_ban}</td>
-            <td><button class="btn-xoa-mon" data-id="${banId}" data-ten="${ban.ten_ban}">Xóa</button></td>
-        `;
+        if (bangQuanLyBanBody) {
+            const row = bangQuanLyBanBody.insertRow();
+            row.innerHTML = `
+                <td>${ban.ten_ban}</td>
+                <td><button class="btn-xoa-mon" data-id="${banId}" data-ten="${ban.ten_ban}">Xóa</button></td>
+            `;
+        }
     });
 }
 
-export function initBan() {
-    const q = query(collection(db, 'QuyetC1_ban'), orderBy('ten_ban'));
-    onSnapshot(q, renderBangQuanLyBan);
+export function initBan(onTablesChangeCallback) {
+    const q = query(collection(db, 'restaurants', RESTAURANT_ID, 'tables'), orderBy('ten_ban'));
+    onSnapshot(q, (snapshot) => {
+        // 1. Render bảng quản lý bàn ở tab "Quản lý Bàn"
+        renderBangQuanLyBan(snapshot);
+        // 2. Gọi callback để render lại lưới bàn ở tab "Bán Hàng"
+        if (onTablesChangeCallback) {
+            onTablesChangeCallback();
+        }
+    });
 
     if (formThemBan) formThemBan.addEventListener('submit', themBanMoi);
     if (bangQuanLyBanBody) bangQuanLyBanBody.addEventListener('click', xoaBan);

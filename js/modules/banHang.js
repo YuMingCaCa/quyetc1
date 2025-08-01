@@ -1,4 +1,5 @@
 import { db, collection, addDoc, doc, setDoc, onSnapshot, deleteDoc, Timestamp, query, getDoc } from '../config/firebase.js';
+import { RESTAURANT_ID, RESTAURANT_NAME } from '../config.js';
 import { currencyFormatter } from '../utils/formatters.js';
 import { menuData } from './menu.js';
 import { danhSachBanData } from './ban.js';
@@ -31,7 +32,7 @@ let donHangCuaCacBan = new Map(); // Lưu trạng thái tất cả các bàn đa
 /**
  * Vẽ lại toàn bộ lưới bàn ăn dựa trên trạng thái mới nhất.
  */
-function renderLuoiBanAn() {
+export function renderLuoiBanAn() {
     danhSachBanDiv.innerHTML = ''; // Xóa các bàn cũ
     danhSachBanData.forEach(soBan => {
         const banElement = document.createElement('button');
@@ -122,7 +123,7 @@ async function themMon(e) {
     donHangHienTai.chi_tiet_mon.push(monMoi);
     donHangHienTai.tong_tien += monMoi.thanh_tien;
 
-    const docRef = doc(db, "QuyetC1_don_hang_hien_tai", `ban_${banDuocChon}`);
+    const docRef = doc(db, "restaurants", RESTAURANT_ID, "current_orders", `ban_${banDuocChon}`);
     try {
         await setDoc(docRef, donHangHienTai);
         formGoiMon.reset();
@@ -147,7 +148,7 @@ async function xoaMon(e) {
     donHangHienTai.chi_tiet_mon.splice(index, 1);
     donHangHienTai.tong_tien -= monBiXoa.thanh_tien;
 
-    const docRef = doc(db, "QuyetC1_don_hang_hien_tai", `ban_${banDuocChon}`);
+    const docRef = doc(db, "restaurants", RESTAURANT_ID, "current_orders", `ban_${banDuocChon}`);
     try {
         if (donHangHienTai.chi_tiet_mon.length === 0) {
             await deleteDoc(docRef); // Nếu hết món thì xóa luôn đơn hàng
@@ -209,7 +210,7 @@ export function generateAndPrintInvoice(hoaDonData) {
         <body>
             <div class="invoice-box">
                 <div class="header">
-                    <h2>Quán Nhậu Quyết C1</h2>
+                    <h2>${RESTAURANT_NAME}</h2>
                     <p>HÓA ĐƠN THANH TOÁN</p>
                     <p>Bàn: ${hoaDonData.ten_ban}</p>
                     <p>Ngày: ${ngayIn} - Giờ: ${gioIn}</p>
@@ -263,7 +264,7 @@ function inHoaDon() {
  */
 export async function huyThanhToan(hoaDonId, hoaDonData) {
     const tenBan = hoaDonData.ten_ban;
-    const donHangHienTaiRef = doc(db, "QuyetC1_don_hang_hien_tai", `ban_${tenBan}`);
+    const donHangHienTaiRef = doc(db, "restaurants", RESTAURANT_ID, "current_orders", `ban_${tenBan}`);
 
     try {
         // 1. Kiểm tra xem bàn có đang được sử dụng không
@@ -279,7 +280,7 @@ export async function huyThanhToan(hoaDonId, hoaDonData) {
         await setDoc(donHangHienTaiRef, donHangDeMoLai);
 
         // 3. Xóa hóa đơn khỏi lịch sử bán hàng
-        const hoaDonLichSuRef = doc(db, "QuyetC1_lich_su_ban_hang", hoaDonId);
+        const hoaDonLichSuRef = doc(db, "restaurants", RESTAURANT_ID, "sales_history", hoaDonId);
         await deleteDoc(hoaDonLichSuRef);
 
         alert(`Đã hủy thanh toán và mở lại bàn "${tenBan}" thành công!`);
@@ -316,10 +317,10 @@ async function thanhToan() {
                 ...donHangHienTai,
                 ngay_thanh_toan: Timestamp.now() // Thêm ngày giờ thanh toán
             };
-            await addDoc(collection(db, "QuyetC1_lich_su_ban_hang"), hoaDonLuuTru);
+            await addDoc(collection(db, "restaurants", RESTAURANT_ID, "sales_history"), hoaDonLuuTru);
 
             // Xóa đơn hàng hiện tại
-            const docRef = doc(db, "QuyetC1_don_hang_hien_tai", `ban_${banDuocChon}`);
+            const docRef = doc(db, "restaurants", RESTAURANT_ID, "current_orders", `ban_${banDuocChon}`);
             await deleteDoc(docRef);
 
             alert(`Đã thanh toán thành công cho bàn ${donHangHienTai.ten_ban}!`);
@@ -330,6 +331,8 @@ async function thanhToan() {
             formOrderWrapper.style.display = 'none';
             renderLuoiBanAn();
 
+            // Gọi hàm callback để thông báo cho app.js biết cần làm mới báo cáo
+            if (onSaleCompletedCallback) onSaleCompletedCallback();
         } catch (error) {
             console.error("Lỗi khi thanh toán: ", error);
         }
@@ -340,12 +343,12 @@ async function thanhToan() {
 // --- KHỞI TẠO MODULE ---
 // =================================================================
 
-export function initBanHang() {
+export function initBanHang(onSaleCompletedCallback) {
     // Vẽ lưới bàn ăn lần đầu tiên khi tải trang
     renderLuoiBanAn();
 
     // Lắng nghe sự thay đổi của TẤT CẢ các đơn hàng đang hoạt động
-    const q = query(collection(db, "QuyetC1_don_hang_hien_tai"));
+    const q = query(collection(db, "restaurants", RESTAURANT_ID, "current_orders"));
     onSnapshot(q, (querySnapshot) => {
         donHangCuaCacBan.clear(); // Xóa dữ liệu cũ
         querySnapshot.forEach((doc) => {
@@ -383,5 +386,5 @@ export function initBanHang() {
     formGoiMon.addEventListener('submit', themMon);
     bangChiTietMonBody.addEventListener('click', xoaMon);
     btnInHoaDon.addEventListener('click', inHoaDon);
-    btnThanhToan.addEventListener('click', thanhToan);
+    btnThanhToan.addEventListener('click', () => thanhToan(onSaleCompletedCallback));
 }

@@ -1,6 +1,6 @@
 import { db, collection, query, where, getDocs, Timestamp, orderBy, doc, updateDoc, deleteDoc } from '../config/firebase.js';
+import { RESTAURANT_ID } from '../config.js';
 import { currencyFormatter } from '../utils/formatters.js';
-import { generateAndPrintInvoice, huyThanhToan } from './banHang.js';
 
 // --- Lấy các phần tử HTML ---
 const inputChonThangBaoCao = document.getElementById('chon-thang-bao-cao');
@@ -30,16 +30,16 @@ let currentMonthSalesDocs = []; // Lưu hóa đơn của tháng đang xem để 
 
 /**
  * Hàm trợ giúp để lấy tổng tiền từ một collection trong một khoảng thời gian.
- * @param {string} collectionName Tên của collection.
+ * @param {Array<string>} collectionPath Mảng các segment của đường dẫn collection.
  * @param {string} dateField Tên trường chứa dữ liệu ngày tháng (Timestamp).
  * @param {string} amountField Tên trường chứa dữ liệu số tiền.
  * @param {Date} startDate Ngày bắt đầu.
  * @param {Date} endDate Ngày kết thúc.
  * @returns {Promise<number>} Tổng số tiền.
  */
-async function getTotalAmountInRange(collectionName, dateField, amountField, startDate, endDate) {
+async function getTotalAmountInRange(collectionPath, dateField, amountField, startDate, endDate) {
     const q = query(
-        collection(db, collectionName),
+        collection(db, ...collectionPath),
         where(dateField, '>=', startDate),
         where(dateField, '<', endDate)
     );
@@ -56,41 +56,33 @@ async function getTotalAmountInRange(collectionName, dateField, amountField, sta
  * @param {Array} docsToRender - Mảng các document hóa đơn cần hiển thị.
  */
 function renderSalesDetailTable(docsToRender) {
-    bangChiTietDoanhThu.innerHTML = `
-        <thead>
+    const tableBody = bangChiTietDoanhThu.querySelector('tbody');
+    if (!tableBody) return; // Đảm bảo tbody tồn tại
+
+    tableBody.innerHTML = docsToRender.map(doc => {
+        const data = doc.data();
+        return `
             <tr>
-                <th>Ngày Thanh Toán</th>
-                <th>Bàn</th>
-                <th>Tổng Tiền</th>
-                <th>Hành Động</th>
+                <td>${data.ngay_thanh_toan.toDate().toLocaleString('vi-VN')}</td>
+                <td>${data.ten_ban}</td>
+                <td>${currencyFormatter.format(data.tong_tien)}</td>
+                <td>
+                    <button class="btn-in-lai" data-id="${doc.id}">In Lại</button>
+                    <button class="btn-huy" data-id="${doc.id}">Hủy</button>
+                </td>
             </tr>
-        </thead>
-        <tbody>
-            ${docsToRender.map(doc => {
-                const data = doc.data();
-                return `
-                    <tr>
-                        <td>${data.ngay_thanh_toan.toDate().toLocaleString('vi-VN')}</td>
-                        <td>${data.ten_ban}</td>
-                        <td>${currencyFormatter.format(data.tong_tien)}</td>
-                        <td>
-                            <button class="btn-in-lai" data-id="${doc.id}">In Lại</button>
-                            <button class="btn-huy" data-id="${doc.id}">Hủy</button>
-                        </td>
-                    </tr>
-                `;
-            }).join('')}
-        </tbody>
-    `;
+        `;
+    }).join('');
+
     if (docsToRender.length === 0) {
-        bangChiTietDoanhThu.querySelector('tbody').innerHTML = `<tr><td colspan="4" style="text-align:center;">Không tìm thấy hóa đơn nào.</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="4" style="text-align:center;">Không tìm thấy hóa đơn nào.</td></tr>`;
     }
 }
 
 /**
  * Hiển thị báo cáo tổng quan (doanh thu, chi phí, lợi nhuận) cho tháng được chọn.
  */
-async function hienThiBaoCaoTongQuan() {
+export async function hienThiBaoCaoTongQuan() {
     const [year, month] = inputChonThangBaoCao.value.split('-').map(Number);
     if (!year || !month) return;
 
@@ -99,10 +91,10 @@ async function hienThiBaoCaoTongQuan() {
 
     // Lấy dữ liệu
     const [totalRevenue, totalCost, salesDetails, costDetails] = await Promise.all([
-        getTotalAmountInRange('QuyetC1_lich_su_ban_hang', 'ngay_thanh_toan', 'tong_tien', startDate, endDate),
-        getTotalAmountInRange('QuyetC1_lich_su_nhap_hang', 'ngay_nhap', 'thanh_tien', startDate, endDate),
-        getDocs(query(collection(db, 'QuyetC1_lich_su_ban_hang'), where('ngay_thanh_toan', '>=', startDate), where('ngay_thanh_toan', '<', endDate), orderBy('ngay_thanh_toan', 'desc'))),
-        getDocs(query(collection(db, 'QuyetC1_lich_su_nhap_hang'), where('ngay_nhap', '>=', startDate), where('ngay_nhap', '<', endDate), orderBy('ngay_nhap', 'desc')))
+        getTotalAmountInRange(['restaurants', RESTAURANT_ID, 'sales_history'], 'ngay_thanh_toan', 'tong_tien', startDate, endDate),
+        getTotalAmountInRange(['restaurants', RESTAURANT_ID, 'purchase_history'], 'ngay_nhap', 'thanh_tien', startDate, endDate),
+        getDocs(query(collection(db, 'restaurants', RESTAURANT_ID, 'sales_history'), where('ngay_thanh_toan', '>=', startDate), where('ngay_thanh_toan', '<', endDate), orderBy('ngay_thanh_toan', 'desc'))),
+        getDocs(query(collection(db, 'restaurants', RESTAURANT_ID, 'purchase_history'), where('ngay_nhap', '>=', startDate), where('ngay_nhap', '<', endDate), orderBy('ngay_nhap', 'desc')))
     ]);
 
     const profit = totalRevenue - totalCost;
@@ -118,6 +110,8 @@ async function hienThiBaoCaoTongQuan() {
 
     // Hiển thị bảng chi tiết chi phí
     const costTableBody = bangChiTietChiPhi.querySelector('tbody');
+    if (!costTableBody) return; // Đảm bảo tbody tồn tại
+
     costTableBody.innerHTML = costDetails.docs.map(doc => {
         const data = doc.data();
         return `
@@ -194,7 +188,7 @@ async function suaChiPhi(e) {
     }
 
     const thanhTienMoi = soLuongMoi * donGiaMoi;
-    const chiPhiRef = doc(db, "QuyetC1_lich_su_nhap_hang", id);
+    const chiPhiRef = doc(db, "restaurants", RESTAURANT_ID, "purchase_history", id);
 
     try {
         await updateDoc(chiPhiRef, {
@@ -216,9 +210,9 @@ async function suaChiPhi(e) {
 async function xoaChiPhi(e) {
     if (!e.target.classList.contains('btn-huy')) return;
 
-    const id = e.target.dataset.id;
+    const id = e.target.dataset.id;    
     if (confirm("Bạn có chắc chắn muốn xóa khoản chi phí này không? Thao tác này không thể hoàn tác.")) {
-        const chiPhiRef = doc(db, "QuyetC1_lich_su_nhap_hang", id);
+        const chiPhiRef = doc(db, "restaurants", RESTAURANT_ID, "purchase_history", id);
         try {
             await deleteDoc(chiPhiRef);
             alert("Xóa chi phí thành công!");
@@ -233,7 +227,7 @@ async function xoaChiPhi(e) {
 /**
  * Hiển thị báo cáo (doanh thu, chi phí, lợi nhuận) cho ngày được chọn.
  */
-async function hienThiBaoCaoNgay() {
+export async function hienThiBaoCaoNgay() {
     const selectedDateValue = inputChonNgayBaoCao.value;
     if (!selectedDateValue) return;
 
@@ -244,8 +238,8 @@ async function hienThiBaoCaoNgay() {
 
     // Lấy dữ liệu
     const [dailyRevenue, dailyCost] = await Promise.all([
-        getTotalAmountInRange('QuyetC1_lich_su_ban_hang', 'ngay_thanh_toan', 'tong_tien', startDate, endDate),
-        getTotalAmountInRange('QuyetC1_lich_su_nhap_hang', 'ngay_nhap', 'thanh_tien', startDate, endDate)
+        getTotalAmountInRange(['restaurants', RESTAURANT_ID, 'sales_history'], 'ngay_thanh_toan', 'tong_tien', startDate, endDate),
+        getTotalAmountInRange(['restaurants', RESTAURANT_ID, 'purchase_history'], 'ngay_nhap', 'thanh_tien', startDate, endDate)
     ]);
 
     const dailyProfit = dailyRevenue - dailyCost;
@@ -259,7 +253,7 @@ async function hienThiBaoCaoNgay() {
 /**
  * Lấy dữ liệu và vẽ biểu đồ lợi nhuận 6 tháng gần nhất.
  */
-async function hienThiBieuDoLoiNhuan() {
+export async function hienThiBieuDoLoiNhuan() {
     const labels = [];
     const profitData = [];
     const now = new Date();
@@ -273,8 +267,8 @@ async function hienThiBieuDoLoiNhuan() {
         const endDate = new Date(year, month + 1, 1);
 
         const [monthlyRevenue, monthlyCost] = await Promise.all([
-            getTotalAmountInRange('QuyetC1_lich_su_ban_hang', 'ngay_thanh_toan', 'tong_tien', startDate, endDate),
-            getTotalAmountInRange('QuyetC1_lich_su_nhap_hang', 'ngay_nhap', 'thanh_tien', startDate, endDate)
+            getTotalAmountInRange(['restaurants', RESTAURANT_ID, 'sales_history'], 'ngay_thanh_toan', 'tong_tien', startDate, endDate),
+            getTotalAmountInRange(['restaurants', RESTAURANT_ID, 'purchase_history'], 'ngay_nhap', 'thanh_tien', startDate, endDate)
         ]);
 
         labels.push(`T${month + 1}/${year}`);
@@ -353,9 +347,19 @@ function setInitialReportDate() {
 }
 
 /**
+ * Tải tất cả dữ liệu cần thiết cho tab báo cáo.
+ * Hàm này chỉ nên được gọi một lần khi người dùng mở tab.
+ */
+export function loadBaoCaoData() {
+    hienThiBaoCaoTongQuan();
+    hienThiBaoCaoNgay();
+    hienThiBieuDoLoiNhuan();
+}
+
+/**
  * Hàm khởi tạo cho module báo cáo.
  */
-export function initBaoCao() {
+export function initBaoCao({ onCancelInvoice, onPrintInvoice }) {
     setInitialReportMonth();
     setInitialReportDate();
 
@@ -364,17 +368,20 @@ export function initBaoCao() {
     btnXemBaoCaoNgay.addEventListener('click', hienThiBaoCaoNgay);
     searchByTableInput.addEventListener('input', filterAndRenderSales);
     searchByDateInput.addEventListener('input', filterAndRenderSales);
-    bangChiTietChiPhi.addEventListener('click', (e) => {
-        suaChiPhi(e);
-        xoaChiPhi(e);
-    });
 
-    bangChiTietDoanhThu.addEventListener('click', (e) => {
+    if (bangChiTietChiPhi) {
+        bangChiTietChiPhi.addEventListener('click', (e) => {
+            if (e.target.classList.contains('btn-sua-mon')) suaChiPhi(e);
+            if (e.target.classList.contains('btn-huy')) xoaChiPhi(e);
+        });
+    }
+
+    if (bangChiTietDoanhThu) bangChiTietDoanhThu.addEventListener('click', (e) => {
         if (e.target.classList.contains('btn-in-lai')) {
             const docId = e.target.dataset.id;
             const hoaDonDoc = currentMonthSalesDocs.find(doc => doc.id === docId);
             if (hoaDonDoc) {
-                generateAndPrintInvoice(hoaDonDoc.data());
+                if (onPrintInvoice) onPrintInvoice(hoaDonDoc.data());
             }
         }
         if (e.target.classList.contains('btn-huy')) {
@@ -383,7 +390,7 @@ export function initBaoCao() {
             if (hoaDonDoc) {
                 const hoaDonData = hoaDonDoc.data();
                 if (confirm(`Bạn có chắc chắn muốn HỦY hóa đơn cho bàn "${hoaDonData.ten_ban}" không?\n\nHành động này sẽ mở lại bàn và xóa hóa đơn khỏi lịch sử.`)) {
-                    huyThanhToan(docId, hoaDonData).then(success => {
+                    if (onCancelInvoice) onCancelInvoice(docId, hoaDonData).then(success => {
                         // Nếu hủy thành công, tải lại báo cáo để cập nhật
                         if (success) hienThiBaoCaoTongQuan();
                     });
@@ -391,14 +398,10 @@ export function initBaoCao() {
             }
         }
     });
-    btnClearSearch.addEventListener('click', () => {
+
+    if (btnClearSearch) btnClearSearch.addEventListener('click', () => {
         searchByTableInput.value = '';
         searchByDateInput.value = '';
         filterAndRenderSales();
     });
-
-    // Tải dữ liệu lần đầu khi mở tab Báo cáo
-    hienThiBaoCaoTongQuan();
-    hienThiBaoCaoNgay();
-    hienThiBieuDoLoiNhuan();
 }

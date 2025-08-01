@@ -1,4 +1,5 @@
 import { db, collection, addDoc, onSnapshot, doc, deleteDoc, orderBy, query, updateDoc } from '../config/firebase.js';
+import { RESTAURANT_ID } from '../config.js';
 import { currencyFormatter } from '../utils/formatters.js';
 
 // --- Lấy các phần tử HTML ---
@@ -13,7 +14,7 @@ const datalistMonAn = document.getElementById('danh-sach-mon-an');
 export const menuData = new Map();
 
 /**
- * Thêm một món mới vào collection 'QuyetC1_menu' trên Firestore.
+ * Thêm một món mới vào collection 'menu' của nhà hàng hiện tại trên Firestore.
  */
 async function themMonVaoMenu(e) {
     e.preventDefault();
@@ -26,7 +27,7 @@ async function themMonVaoMenu(e) {
     }
 
     try {
-        await addDoc(collection(db, 'QuyetC1_menu'), {
+        await addDoc(collection(db, 'restaurants', RESTAURANT_ID, 'menu'), {
             ten_mon: tenMon,
             don_gia: donGia
         });
@@ -49,7 +50,7 @@ async function xoaMonKhoiMenu(e) {
     const tenMon = e.target.dataset.ten;
     if (confirm(`Bạn có chắc chắn muốn xóa món "${tenMon}" khỏi menu không?`)) {
         try {
-            await deleteDoc(doc(db, 'QuyetC1_menu', monId));
+            await deleteDoc(doc(db, 'restaurants', RESTAURANT_ID, 'menu', monId));
             alert('Đã xóa món thành công!');
         } catch (error) {
             console.error("Lỗi khi xóa món: ", error);
@@ -84,7 +85,7 @@ async function suaGiaMon(e) {
     }
 
     try {
-        const monRef = doc(db, 'QuyetC1_menu', monId);
+        const monRef = doc(db, 'restaurants', RESTAURANT_ID, 'menu', monId);
         await updateDoc(monRef, { don_gia: giaMoi });
         alert('Cập nhật giá thành công!');
     } catch (error) {
@@ -131,7 +132,7 @@ function renderMenu(snapshot) {
  */
 export function initMenu() {
     // Lắng nghe sự thay đổi real-time của menu, sắp xếp theo tên
-    const q = query(collection(db, 'QuyetC1_menu'), orderBy('ten_mon'));
+    const q = query(collection(db, 'restaurants', RESTAURANT_ID, 'menu'), orderBy('ten_mon'));
     onSnapshot(q, (snapshot) => {
         renderMenu(snapshot);
     });
